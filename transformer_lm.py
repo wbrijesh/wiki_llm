@@ -428,45 +428,38 @@ class TransformerLM(nn.Module):
         """Return the number of parameters in the model."""
         return sum(p.numel() for p in self.parameters())
 
+    @torch.no_grad()
     def generate(
         self,
         start_tokens: torch.Tensor,
-        max_length: int,
-        temperature: float = 1.0
+        max_tokens: int,
+        temperature: float = 1.0,
+        top_p: float = 0.9
     ) -> torch.Tensor:
-        """
-        Generate text from the model.
-
-        Args:
-            start_tokens: Starting token IDs (1D tensor)
-            max_length: Maximum length to generate
-            temperature: Sampling temperature (1.0 = normal, <1.0 = more conservative)
-
-        Returns:
-            Generated token IDs
-        """
         self.eval()
-        with torch.no_grad():
-            # Add batch dimension
-            tokens = start_tokens.unsqueeze(0)
+        tokens = start_tokens.unsqueeze(0) if start_tokens.dim() == 1 else start_tokens
 
-            # Generate tokens up to max_length
-            for _ in range(max_length):
-                # Get current sequence
-                curr_seq = tokens
+        for _ in range(max_tokens):
+            # Get logits for next token
+            logits = self(tokens)[:, -1, :] / temperature
 
-                # Forward pass
-                logits = self(curr_seq)
+            # Apply nucleus sampling (top-p)
+            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+            cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
-                # Get next token logits (last position)
-                next_token_logits = logits[:, -1, :] / temperature
+            # Remove tokens with cumulative probability above the threshold
+            sorted_indices_to_remove = cumulative_probs > top_p
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+            sorted_indices_to_remove[..., 0] = 0
 
-                # Sample from distribution
-                probs = F.softmax(next_token_logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1)
+            indices_to_remove = sorted_indices[sorted_indices_to_remove]
+            logits[:, indices_to_remove] = float('-inf')
 
-                # Append to sequence
-                tokens = torch.cat([tokens, next_token], dim=1)
+            # Sample from adjusted distribution
+            probs = F.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
 
-            # Return without batch dimension
-            return tokens.squeeze(0)
+            # Append new token
+            tokens = torch.cat([tokens, next_token], dim=1)
+
+        return tokens.squeeze(0)
