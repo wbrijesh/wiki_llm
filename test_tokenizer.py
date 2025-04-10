@@ -68,7 +68,7 @@ def main():
 
     # Save vocab
     tokenizer.save_vocab("wiki_vocab.txt")
-    print(f"\nSaved vocabulary to wiki_vocab.txt")
+    print("\nSaved vocabulary to wiki_vocab.txt")
 
     # Print runtime
     elapsed_time = time.time() - start_time

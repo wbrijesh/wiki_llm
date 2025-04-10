@@ -1,6 +1,6 @@
 import re
 import collections
-from typing import List, Dict, Union
+from typing import List
 
 class SimpleTokenizer:
     def __init__(self, vocab_size: int = 10000):
