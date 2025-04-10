@@ -1,0 +1,5 @@
+data
+processed_data
+__pycache__
+*.txt
+.DS_Store
